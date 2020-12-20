@@ -187,7 +187,8 @@ def showWelcomeAnimation():
         FPSCLOCK.tick(FPS)
 
 class Bird():
-    def __init__(self,x,y):
+    def __init__(self,birdId,x,y):
+        self.id = birdId
         self.x = x
         self.y = y
         self.playerVelY    =  -9   # player's velocity along Y, default same as playerFlapped
@@ -197,7 +198,7 @@ class Bird():
         self.playerRot     =  45   # player's rotation
         self.playerVelRot  =   3   # angular speed
         self.playerRotThr  =  20   # rotation threshold
-        self.playerFlapAcc =  -9   # players speed on flapping
+        self.playerFlapAcc =  -random.randint(0,20)   # players speed on flapping
         self.playerFlapped = False # True when player flaps
 
     def check_score(self, upperPipes):
@@ -235,7 +236,10 @@ def mainGame(movementInfo):
     playerIndexGen = movementInfo['playerIndexGen']
     playerx, playery = int(SCREENWIDTH * 0.2), movementInfo['playery']
     #create new bird
-    newBird = Bird(playerx,playery)
+    birds =[]
+    for i in range(10):
+        birds.append(Bird(i,playerx,playery))
+
     basex = movementInfo['basex']
     baseShift = IMAGES['base'].get_width() - IMAGES['background'].get_width()
 
@@ -266,37 +270,38 @@ def mainGame(movementInfo):
                 pygame.quit()
                 sys.exit()
             if event.type == KEYDOWN and (event.key == K_SPACE or event.key == K_UP):
-                if newBird.y > -2 * IMAGES['player'][0].get_height():
-                    newBird.playerVelY = newBird.playerFlapAcc
-                    newBird.playerFlapped = True
-                    SOUNDS['wing'].play()
-
+                for bird in birds:
+                    if bird.y > -2 * IMAGES['player'][0].get_height():
+                        bird.playerVelY = bird.playerFlapAcc
+                        bird.playerFlapped = True
+                        SOUNDS['wing'].play()
+        for bird in birds:
         # check for crash here
-        crashTest = checkCrash({'x': newBird.x, 'y': newBird.y, 'index': playerIndex},
+            crashTest = checkCrash({'x': bird.x, 'y': bird.y, 'index': playerIndex},
                                upperPipes, lowerPipes)
-        if crashTest[0]:
-            return {
-                'y': newBird.y,
-                'groundCrash': crashTest[1],
-                'basex': basex,
-                'upperPipes': upperPipes,
-                'lowerPipes': lowerPipes,
-                'score': score,
-                'playerVelY': newBird.playerVelY,
-                'playerRot': newBird.playerRot
-            }
+            if crashTest[0]:
+                return {
+                    'y': bird.y,
+                    'groundCrash': crashTest[1],
+                    'basex': basex,
+                    'upperPipes': upperPipes,
+                    'lowerPipes': lowerPipes,
+                    'score': score,
+                    'playerVelY': bird.playerVelY,
+                    'playerRot': bird.playerRot
+                }
 
-        score += newBird.check_score(upperPipes)
+            score += bird.check_score(upperPipes)
 
         # playerIndex basex change
-        if (loopIter + 1) % 3 == 0:
-            playerIndex = next(playerIndexGen)
-        loopIter = (loopIter + 1) % 30
-        basex = -((-basex + 100) % baseShift)
+            if (loopIter + 1) % 3 == 0:
+                playerIndex = next(playerIndexGen)
+            loopIter = (loopIter + 1) % 30
+            basex = -((-basex + 100) % baseShift)
 
-        newBird.rotate()
+            bird.rotate()
 
-        newBird.move(playerIndex)
+            bird.move(playerIndex)
 
         # move pipes to left
         for uPipe, lPipe in zip(upperPipes, lowerPipes):
@@ -325,13 +330,14 @@ def mainGame(movementInfo):
         # print score so player overlaps the score
         showScore(score)
 
+        for bird in birds:
         # Player rotation has a threshold
-        visibleRot = newBird.playerRotThr
-        if newBird.playerRot <= newBird.playerRotThr:
-            visibleRot = newBird.playerRot
+            visibleRot = bird.playerRotThr
+            if bird.playerRot <= bird.playerRotThr:
+                visibleRot = bird.playerRot
         
-        playerSurface = pygame.transform.rotate(IMAGES['player'][playerIndex], visibleRot)
-        SCREEN.blit(playerSurface, (newBird.x, newBird.y))
+            playerSurface = pygame.transform.rotate(IMAGES['player'][playerIndex], visibleRot)
+            SCREEN.blit(playerSurface, (bird.x, bird.y))
 
         pygame.display.update()
         FPSCLOCK.tick(FPS)
