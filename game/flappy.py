@@ -3,6 +3,7 @@ import random
 import sys
 import neat
 import pygame
+import os
 from pygame.locals import *
 
 
@@ -13,7 +14,8 @@ PIPEGAPSIZE  = 100 # gap between upper and lower part of pipe
 BASEY        = SCREENHEIGHT * 0.79
 # image, sound and hitmask  dicts
 IMAGES, SOUNDS, HITMASKS = {}, {}, {}
-TOTALBIRDS = 10
+TOTALBIRDS = 50
+generation = 0
 
 # list of all possible players (tuple of 3 positions of flap)
 PLAYERS_LIST = (
@@ -56,8 +58,8 @@ except NameError:
     xrange = range
 
 
-def main():
-    global SCREEN, FPSCLOCK
+def main(config_file):
+    global SCREEN, FPSCLOCK, movementInfo
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
     SCREEN = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
@@ -131,8 +133,23 @@ def main():
         )
 
         movementInfo = showWelcomeAnimation()
-        crashInfo = mainGame(movementInfo)
-        showGameOverScreen(crashInfo)
+        config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                         neat.DefaultSpeciesSet, neat.DefaultStagnation,
+                         config_file)
+
+         # Create the population, which is the top-level object for a NEAT run.
+        p = neat.Population(config)
+
+        # Add a stdout reporter to show progress in the terminal.
+        p.add_reporter(neat.StdOutReporter(True))
+        stats = neat.StatisticsReporter()
+        p.add_reporter(stats)
+        #p.add_reporter(neat.Checkpointer(5))
+
+        # Run for up to 50 generations.
+        winner = p.run(mainGame, 50)
+        # crashInfo = mainGame([(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)], [])
+        # showGameOverScreen(crashInfo)
 
 
 def showWelcomeAnimation():
@@ -199,26 +216,27 @@ class Bird():
         self.playerRot     =  45   # player's rotation
         self.playerVelRot  =   3   # angular speed
         self.playerRotThr  =  20   # rotation threshold
-        self.playerFlapAcc =  -random.randint(0,20)   # players speed on flapping
+        self.playerFlapAcc =  -9   # players speed on flapping
         self.playerFlapped = False # True when player flaps
         self.score = 0             #score of bird ()
 
     def check_score(self, upperPipes):
-    	# check for score
+        # check for score
         playerMidPos = self.x + IMAGES['player'][0].get_width() / 2
         for pipe in upperPipes:
             pipeMidPos = pipe['x'] + IMAGES['pipe'][0].get_width() / 2
             if pipeMidPos <= playerMidPos < pipeMidPos + 4:
                 SOUNDS['point'].play()
                 self.score += 1
+                return True
 
     def rotate(self):
-    	# rotate the player
+        # rotate the player     
         if self.playerRot > -90:
             self.playerRot -= self.playerVelRot
 
     def move(self, playerIndex):
-    	# player's movement
+        # player's movement
         if self.playerVelY < self.playerMaxVelY and not self.playerFlapped:
             self.playerVelY += self.playerAccY
         if self.playerFlapped:
@@ -230,18 +248,37 @@ class Bird():
         self.playerHeight = IMAGES['player'][playerIndex].get_height()
         self.y += min(self.playerVelY, BASEY - self.y - self.playerHeight)
 
+    def jump(self):
+        self.playerVelY = self.playerFlapAcc
+        self.playerFlapped = True
+        SOUNDS['wing'].play()
 
 
-def mainGame(movementInfo):
+
+def mainGame(genomes, config):
+    global generation 
+    generation += 1
+
+
     score = playerIndex = loopIter = 0
     playerIndexGen = movementInfo['playerIndexGen']
     playerx, playery = int(SCREENWIDTH * 0.2), movementInfo['playery']
-    #create new bird
+
+    networks = []
+    genomesList = []
     birds = []
     deadBirds = []
-    for i in range(TOTALBIRDS):
-        birds.append(Bird(i,playerx,playery))
-
+    counter = 0
+    for genome_id, genome in genomes:
+        genome.fitness = 0
+        network = neat.nn.FeedForwardNetwork.create(genome,config)
+        networks.append(network)
+        birds.append(Bird(counter, playerx,playery))
+        genomesList.append(genome)
+        counter += 1
+    print(len(networks))
+    print(len(birds))
+    print("\n\n\n")
     basex = movementInfo['basex']
     baseShift = IMAGES['base'].get_width() - IMAGES['background'].get_width()
 
@@ -262,30 +299,47 @@ def mainGame(movementInfo):
     ]
 
     pipeVelX = -4
-    
-    dead_bird_ids = []
 
-    while True:
+    while True and len(birds) > 0:
+
+        pipe_index = 0
+        if len(birds) > 0:
+            if len(upperPipes) > 1 and birds[0].x > upperPipes[0]['x'] + IMAGES['pipe'][0].get_width():
+                pipe_index = 1
+
         for event in pygame.event.get():
             if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
                 pygame.quit()
                 sys.exit()
-            if event.type == KEYDOWN and (event.key == K_SPACE or event.key == K_UP):
-                for bird in birds:
-                    if bird.y > -2 * IMAGES['player'][0].get_height():
-                        bird.playerVelY = bird.playerFlapAcc
-                        bird.playerFlapped = True
-                        SOUNDS['wing'].play()
+            # if event.type == KEYDOWN and (event.key == K_SPACE or event.key == K_UP):
+            #     for bird in birds:
+            #         if bird.y > -2 * IMAGES['player'][0].get_height():
+            #             bird.playerVelY = bird.playerFlapAcc
+            #             bird.playerFlapped = True
+            #             SOUNDS['wing'].play()
+
+        for x, bird in enumerate(birds):
+            genomesList[x].fitness += 0.1
+            bird.move(playerIndex)
+            
+            output = networks[birds.index(bird)].activate((bird.y, bird.y - lowerPipes[pipe_index]['y'], bird.y - upperPipes[pipe_index]['y'] + IMAGES['pipe'][0].get_height()))
+            if output[0] > .5:
+                bird.jump()
+
         for bird in birds:
         # check for crash here
-            if bird.id not in dead_bird_ids:
-                crashTest = checkCrash({'x': bird.x, 'y': bird.y, 'index': playerIndex}, upperPipes, lowerPipes)
-                if crashTest[0]:
-                    dead_bird_ids.append(bird.id)
-                bird.check_score(upperPipes)
-                score = bird.score
+            crashTest = checkCrash({'x': bird.x, 'y': bird.y, 'index': playerIndex}, upperPipes, lowerPipes)
+            increase = bird.check_score(upperPipes)
+            if crashTest[0]:
+                genomesList[birds.index(bird)].fitness -= 1
+                networks.pop(birds.index(bird))
+                genomesList.pop(birds.index(bird))
+                birds.pop(birds.index(bird))
+            elif increase:
+                genomesList[birds.index(bird)].fitness += 5
+            score = bird.score
         # playerIndex basex change
-        if len(dead_bird_ids) == TOTALBIRDS:
+        if len(birds) == 0:
             return  {
                     'y': bird.y,
                     'groundCrash': crashTest[1],
@@ -297,14 +351,13 @@ def mainGame(movementInfo):
                     'playerRot': bird.playerRot
                 }
         for bird in birds:
-            if bird.id not in dead_bird_ids:
-                if (loopIter + 1) % 3 == 0:
-                    playerIndex = next(playerIndexGen)
-                loopIter = (loopIter + 1) % 30
-                basex = -((-basex + 100) % baseShift)
+            if (loopIter + 1) % 3 == 0:
+                playerIndex = next(playerIndexGen)
+            loopIter = (loopIter + 1) % 30
+            basex = -((-basex + 100) % baseShift)
 
-                bird.rotate()
-                bird.move(playerIndex)
+            bird.rotate()
+            
 
         # move pipes to left
         for uPipe, lPipe in zip(upperPipes, lowerPipes):
@@ -335,13 +388,12 @@ def mainGame(movementInfo):
 
         for bird in birds:
         # Player rotation has a threshold
-            if bird.id not in dead_bird_ids:
-                visibleRot = bird.playerRotThr
-                if bird.playerRot <= bird.playerRotThr:
-                    visibleRot = bird.playerRot
-        
-                playerSurface = pygame.transform.rotate(IMAGES['player'][playerIndex], visibleRot)
-                SCREEN.blit(playerSurface, (bird.x, bird.y))
+            visibleRot = bird.playerRotThr
+            if bird.playerRot <= bird.playerRotThr:
+                visibleRot = bird.playerRot
+    
+            playerSurface = pygame.transform.rotate(IMAGES['player'][playerIndex], visibleRot)
+            SCREEN.blit(playerSurface, (bird.x, bird.y))
 
         pygame.display.update()
         FPSCLOCK.tick(FPS)
@@ -459,6 +511,8 @@ def checkCrash(player, upperPipes, lowerPipes):
     # if player crashes into ground
     if player['y'] + player['h'] >= BASEY - 1:
         return [True, True]
+    if player['y'] + player['h'] < -50:
+        return [True, True]
     else:
 
         playerRect = pygame.Rect(player['x'], player['y'],
@@ -511,4 +565,7 @@ def getHitmask(image):
     return mask
 
 if __name__ == '__main__':
-    main()
+    local_dir = os.path.dirname(__file__)
+    config_path = os.path.join(local_dir, 'config-feedforward.txt')
+    print(config_path)
+    main(config_path)
