@@ -186,12 +186,56 @@ def showWelcomeAnimation():
         pygame.display.update()
         FPSCLOCK.tick(FPS)
 
+class Bird():
+    def __init__(self,x,y):
+        self.x = x
+        self.y = y
+        self.playerVelY    =  -9   # player's velocity along Y, default same as playerFlapped
+        self.playerMaxVelY =  10   # max vel along Y, max descend speed
+        self.playerMinVelY =  -8   # min vel along Y, max ascend speed
+        self.playerAccY    =   1   # players downward accleration
+        self.playerRot     =  45   # player's rotation
+        self.playerVelRot  =   3   # angular speed
+        self.playerRotThr  =  20   # rotation threshold
+        self.playerFlapAcc =  -9   # players speed on flapping
+        self.playerFlapped = False # True when player flaps
+
+    def check_score(self, upperPipes):
+    	# check for score
+        playerMidPos = self.x + IMAGES['player'][0].get_width() / 2
+        for pipe in upperPipes:
+            pipeMidPos = pipe['x'] + IMAGES['pipe'][0].get_width() / 2
+            if pipeMidPos <= playerMidPos < pipeMidPos + 4:
+                SOUNDS['point'].play()
+                return 1
+        return 0
+
+    def rotate(self):
+    	# rotate the player
+        if self.playerRot > -90:
+            self.playerRot -= self.playerVelRot
+
+    def move(self, playerIndex):
+    	# player's movement
+        if self.playerVelY < self.playerMaxVelY and not self.playerFlapped:
+            self.playerVelY += self.playerAccY
+        if self.playerFlapped:
+            self.playerFlapped = False
+
+            # more rotation to cover the threshold (calculated in visible rotation)
+            self.playerRot = 45
+
+        self.playerHeight = IMAGES['player'][playerIndex].get_height()
+        self.y += min(self.playerVelY, BASEY - self.y - self.playerHeight)
+
+
 
 def mainGame(movementInfo):
     score = playerIndex = loopIter = 0
     playerIndexGen = movementInfo['playerIndexGen']
     playerx, playery = int(SCREENWIDTH * 0.2), movementInfo['playery']
-
+    #create new bird
+    newBird = Bird(playerx,playery)
     basex = movementInfo['basex']
     baseShift = IMAGES['base'].get_width() - IMAGES['background'].get_width()
 
@@ -213,16 +257,7 @@ def mainGame(movementInfo):
 
     pipeVelX = -4
 
-    # player velocity, max velocity, downward accleration, accleration on flap
-    playerVelY    =  -9   # player's velocity along Y, default same as playerFlapped
-    playerMaxVelY =  10   # max vel along Y, max descend speed
-    playerMinVelY =  -8   # min vel along Y, max ascend speed
-    playerAccY    =   1   # players downward accleration
-    playerRot     =  45   # player's rotation
-    playerVelRot  =   3   # angular speed
-    playerRotThr  =  20   # rotation threshold
-    playerFlapAcc =  -9   # players speed on flapping
-    playerFlapped = False # True when player flaps
+    
 
 
     while True:
@@ -231,33 +266,27 @@ def mainGame(movementInfo):
                 pygame.quit()
                 sys.exit()
             if event.type == KEYDOWN and (event.key == K_SPACE or event.key == K_UP):
-                if playery > -2 * IMAGES['player'][0].get_height():
-                    playerVelY = playerFlapAcc
-                    playerFlapped = True
+                if newBird.y > -2 * IMAGES['player'][0].get_height():
+                    newBird.playerVelY = newBird.playerFlapAcc
+                    newBird.playerFlapped = True
                     SOUNDS['wing'].play()
 
         # check for crash here
-        crashTest = checkCrash({'x': playerx, 'y': playery, 'index': playerIndex},
+        crashTest = checkCrash({'x': newBird.x, 'y': newBird.y, 'index': playerIndex},
                                upperPipes, lowerPipes)
         if crashTest[0]:
             return {
-                'y': playery,
+                'y': newBird.y,
                 'groundCrash': crashTest[1],
                 'basex': basex,
                 'upperPipes': upperPipes,
                 'lowerPipes': lowerPipes,
                 'score': score,
-                'playerVelY': playerVelY,
-                'playerRot': playerRot
+                'playerVelY': newBird.playerVelY,
+                'playerRot': newBird.playerRot
             }
 
-        # check for score
-        playerMidPos = playerx + IMAGES['player'][0].get_width() / 2
-        for pipe in upperPipes:
-            pipeMidPos = pipe['x'] + IMAGES['pipe'][0].get_width() / 2
-            if pipeMidPos <= playerMidPos < pipeMidPos + 4:
-                score += 1
-                SOUNDS['point'].play()
+        score += newBird.check_score(upperPipes)
 
         # playerIndex basex change
         if (loopIter + 1) % 3 == 0:
@@ -265,21 +294,9 @@ def mainGame(movementInfo):
         loopIter = (loopIter + 1) % 30
         basex = -((-basex + 100) % baseShift)
 
-        # rotate the player
-        if playerRot > -90:
-            playerRot -= playerVelRot
+        newBird.rotate()
 
-        # player's movement
-        if playerVelY < playerMaxVelY and not playerFlapped:
-            playerVelY += playerAccY
-        if playerFlapped:
-            playerFlapped = False
-
-            # more rotation to cover the threshold (calculated in visible rotation)
-            playerRot = 45
-
-        playerHeight = IMAGES['player'][playerIndex].get_height()
-        playery += min(playerVelY, BASEY - playery - playerHeight)
+        newBird.move(playerIndex)
 
         # move pipes to left
         for uPipe, lPipe in zip(upperPipes, lowerPipes):
@@ -309,12 +326,12 @@ def mainGame(movementInfo):
         showScore(score)
 
         # Player rotation has a threshold
-        visibleRot = playerRotThr
-        if playerRot <= playerRotThr:
-            visibleRot = playerRot
+        visibleRot = newBird.playerRotThr
+        if newBird.playerRot <= newBird.playerRotThr:
+            visibleRot = newBird.playerRot
         
         playerSurface = pygame.transform.rotate(IMAGES['player'][playerIndex], visibleRot)
-        SCREEN.blit(playerSurface, (playerx, playery))
+        SCREEN.blit(playerSurface, (newBird.x, newBird.y))
 
         pygame.display.update()
         FPSCLOCK.tick(FPS)
