@@ -150,13 +150,11 @@ def main(config_file):
         winner = p.run(mainGame, 50)
         generations = list(range(50))
         means = stats.get_fitness_mean()
-        medians = stats.get_fitness_median()
-        stdevs = stats.get_fitness_stdev()
         bests = stats.get_fitness_stat(max)
-        total_stats = list(zip(generations, means, medians, stdevs, bests))
+        total_stats = list(zip(generations, means, bests))
         with open('stats.csv', "w") as f:
             writer = csv.writer(f)
-            writer.writerow(['Generation', 'Average Fitness', 'Medians', 'Standard Deviation', 'Highest Fitness'])
+            writer.writerow(['Generation', 'Average Fitness', 'Highest Fitness'])
             for row in total_stats:
                 writer.writerow(row)
 
