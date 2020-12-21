@@ -5,9 +5,9 @@ import neat
 import pygame
 import os
 from pygame.locals import *
+import csv
 
-
-FPS = 30
+FPS = 1000
 SCREENWIDTH  = 288
 SCREENHEIGHT = 512
 PIPEGAPSIZE  = 100 # gap between upper and lower part of pipe
@@ -147,9 +147,18 @@ def main(config_file):
         #p.add_reporter(neat.Checkpointer(5))
 
         # Run for up to 50 generations.
-        winner = p.run(mainGame, 50)
-        # crashInfo = mainGame([(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)], [])
-        # showGameOverScreen(crashInfo)
+        winner = p.run(mainGame, 2)
+        generations = list(range(2))
+        means = stats.get_fitness_mean()
+        medians = stats.get_fitness_median()
+        stdevs = stats.get_fitness_stdev()
+        bests = stats.get_fitness_stat(max)
+        total_stats = list(zip(generations, means, medians, stdevs, bests))
+        with open('stats.csv', "w") as f:
+            writer = csv.writer(f)
+            writer.writerow(['Generation', 'Average Fitness', 'Standard Deviation', 'Highest Fitness'])
+            for row in total_stats:
+                writer.writerow(row)
 
 
 def showWelcomeAnimation():
@@ -231,7 +240,7 @@ class Bird():
                 return True
 
     def rotate(self):
-        # rotate the player     
+        # rotate the player
         if self.playerRot > -90:
             self.playerRot -= self.playerVelRot
 
@@ -256,7 +265,7 @@ class Bird():
 
 
 def mainGame(genomes, config):
-    global generation 
+    global generation
     generation += 1
 
 
@@ -321,7 +330,7 @@ def mainGame(genomes, config):
         for x, bird in enumerate(birds):
             genomesList[x].fitness += 0.1
             bird.move(playerIndex)
-            
+
             output = networks[birds.index(bird)].activate((bird.y, bird.y - lowerPipes[pipe_index]['y'], bird.y - upperPipes[pipe_index]['y'] + IMAGES['pipe'][0].get_height()))
             if output[0] > .5:
                 bird.jump()
@@ -357,7 +366,7 @@ def mainGame(genomes, config):
             basex = -((-basex + 100) % baseShift)
 
             bird.rotate()
-            
+
 
         # move pipes to left
         for uPipe, lPipe in zip(upperPipes, lowerPipes):
@@ -391,7 +400,7 @@ def mainGame(genomes, config):
             visibleRot = bird.playerRotThr
             if bird.playerRot <= bird.playerRotThr:
                 visibleRot = bird.playerRot
-    
+
             playerSurface = pygame.transform.rotate(IMAGES['player'][playerIndex], visibleRot)
             SCREEN.blit(playerSurface, (bird.x, bird.y))
 
@@ -451,7 +460,7 @@ def showGameOverScreen(crashInfo):
         SCREEN.blit(IMAGES['base'], (basex, BASEY))
         showScore(score)
 
-        
+
 
 
         playerSurface = pygame.transform.rotate(IMAGES['player'][1], playerRot)
