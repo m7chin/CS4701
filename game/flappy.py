@@ -147,8 +147,8 @@ def main(config_file):
         #p.add_reporter(neat.Checkpointer(5))
 
         # Run for up to 50 generations.
-        winner = p.run(mainGame, 2)
-        generations = list(range(2))
+        winner = p.run(mainGame, 50)
+        generations = list(range(50))
         means = stats.get_fitness_mean()
         medians = stats.get_fitness_median()
         stdevs = stats.get_fitness_stdev()
@@ -156,7 +156,7 @@ def main(config_file):
         total_stats = list(zip(generations, means, medians, stdevs, bests))
         with open('stats.csv', "w") as f:
             writer = csv.writer(f)
-            writer.writerow(['Generation', 'Average Fitness', 'Standard Deviation', 'Highest Fitness'])
+            writer.writerow(['Generation', 'Average Fitness', 'Medians', 'Standard Deviation', 'Highest Fitness'])
             for row in total_stats:
                 writer.writerow(row)
 
